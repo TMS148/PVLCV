@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="page-title">KIA 隔熱紙下單小幫手</title>
 
-    <!-- 引入 SheetJS 解析 Excel 檔案 (供PV版使用) -->
+    <!-- 引入 SheetJS 解析 Excel 檔案 -->
     <script src="https://jsdelivr.net"></script>
 
     <style>
@@ -183,15 +183,18 @@
         .loading-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.75);
+            background: rgba(0,0,0,0.85);
             color: white;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             font-size: 1.2rem;
             z-index: 9999;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
         }
-        /* 版本切換標籤提示 */
         .version-badge {
             background-color: #eef2f7;
             color: var(--primary);
@@ -203,11 +206,28 @@
             margin-top: -10px;
             margin-bottom: 15px;
         }
+        .fallback-box {
+            margin-top: 20px;
+            background: #222;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            display: block;
+        }
     </style>
 </head>
 <body>
 
-<div id="loading" class="loading-overlay">正在讀取 Excel 車型與隔熱紙對照表...</div>
+<div id="loading" class="loading-overlay">
+    <div id="loading-spinner" style="margin-bottom: 15px; font-size: 2rem;">⏳</div>
+    <div id="loading-text" style="font-weight: bold;">正在自動讀取 GitHub 上的 database.xlsx ...</div>
+    
+    <div class="fallback-box">
+        <p style="font-size: 0.9rem; color: #aaa; margin: 0 0 10px 0;">💡 若轉圈超過 5 秒或自動讀取失敗（請確認 GitHub 上的 Excel 檔名是否全小寫）。</p>
+        <p style="font-size: 0.9rem; color: #fff; margin: 0 0 10px 0; font-weight: bold;">您可以直接點擊下方「手動選取本機 Excel」直接解鎖操作：</p>
+        <input type="file" id="excel-file-input" accept=".xlsx" style="font-size: 0.95rem; color: white;">
+    </div>
+</div>
 
 <div class="container">
     <div class="header-title">
@@ -264,24 +284,23 @@
         <div class="part-block">
             <div class="part-title" id="front-title-text">【前擋】</div>
             <div class="part-grid">
-                <div class="form-group">
-                    <label id="front-brand-label">品牌 / 系列</label>
-                    <select id="front-brand" onchange="onBrandChange('front')">
-                        <option value="">-- 請選擇品牌 --</option>
-                    </select>
-                </div>
-                <div class="form-group" id="front-series-group">
-                    <label>系列</label>
-                    <select id="front-series" onchange="onSeriesChange('front')">
-                        <option value="">-- 請先選品牌 --</option>
-                    </select>
-                </div>
-                <div class="form-group" id="front-spec-group" style="grid-column: span 1;">
-                    <label>適用車型規格</label>
-                    <select id="front-spec" onchange="onSpecChange('front')">
-                        <option value="">-- 請先選系列 --</option>
+品牌
+-- 請選擇品牌 --
+
+
+系列
+-- 請先選品牌 --
+
+
+適用車型規格
+-- 請先選系列 --
+
+
 透光度
 -- 請先選規格 --
+
+
+
 
 件號：
 ---
@@ -290,33 +309,42 @@
 ⚠️ 警告：所選件號適用車型與您選擇的車型不符！
 【車身】
 
-品牌 / 系列
+品牌
 -- 請選擇品牌 --
+
 
 系列
 -- 請先選品牌 --
 
+
 適用車型規格
 -- 請先選系列 --
+
 
 車身各位置透光度：
 前座 (法規40以上)
 -- 請先選規格 --
 
+
 後座
 -- 請先選規格 --
+
 
 後擋
 -- 請先選規格 --
 
+
 車身透光度
 -- 請先選規格 --
+
 
 前窗透光度
 -- 請先選規格 --
 
+
 後窗透光度
 -- 請先選規格 --
+
 
 件號：
 ---
@@ -340,6 +368,9 @@
 透光度
 -- 請先選規格 --
 
+
+
+
 件號：
 ---
 複製件號
@@ -350,44 +381,42 @@
 
 一鍵複製系統備註文字
 
-// 全域狀態：'PV' 或 'LCV'
 let CURRENT_MODE = 'PV';
-// --- 資料庫定義 ---
-let PV_DATABASE = [];
+let MASTER_DATABASE = [];
 let PV_CAR_MODELS = [];
 let PV_VIN_PREFIX_MAP = {};
-// 直接寫死 LCV (卡旺) 的資料庫
-const LCV_DATABASE = [
-{"brand": "Smith", "part_type": "前擋", "series": "Bella系列", "part_no": "99PVYKAW122", "raw_cars": "全車型", "cars": ["單廂", "大單廂", "雙廂"], "vlt_display": "Bella 70", "vlts": ["Bella 70"]},
-{"brand": "FSK", "part_type": "前擋", "series": "KS系列", "part_no": "99PVYKAWFSK122", "raw_cars": "全車型", "cars": ["單廂", "大單廂", "雙廂"], "vlt_display": "KS 78", "vlts": ["KS 78"]},
-{"brand": "3M", "part_type": "前擋", "series": "8803 PLUS系列", "part_no": "99PVYKAW3M122", "raw_cars": "全車型", "cars": ["單廂", "大單廂", "雙廂"], "vlt_display": "P 70", "vlts": ["P 70"]},
-{"brand": "Smith", "part_type": "車身", "series": "Bella系列", "part_no": "99PVYKAW120S", "raw_cars": "單廂", "cars": ["單廂"], "front_vlts": ["40", "70"], "rear_vlts": ["05", "15", "30", "40", "70"], "vlts": ["40", "70"]},
-{"brand": "FSK", "part_type": "車身", "series": "KS系列", "part_no": "99PVYKAWFSK120S", "raw_cars": "單廂", "cars": ["單廂"], "front_vlts": ["40"], "rear_vlts": ["20", "40"], "vlts": ["40"]},
-{"brand": "3M", "part_type": "車身", "series": "8803 PLUS系列", "part_no": "99PVYKAW3M120S", "raw_cars": "單廂", "cars": ["單廂"], "front_vlts": ["40", "70"], "rear_vlts": ["18", "35", "40", "70"], "vlts": ["40", "70"]},
-{"brand": "Smith", "part_type": "車身", "series": "Bella系列", "part_no": "99PVYKAW120K", "raw_cars": "大單廂", "cars": ["大單廂"], "front_vlts": ["40", "70"], "rear_vlts": ["05", "15", "30", "40", "70"], "vlts": ["40", "70"]},
-{"brand": "FSK", "part_type": "車身", "series": "KS系列", "part_no": "99PVYKAWFSK120K", "raw_cars": "大單廂", "cars": ["大單廂"], "front_vlts": ["40"], "rear_vlts": ["20", "40"], "vlts": ["40"]},
-{"brand": "3M", "part_type": "車身", "series": "8803 PLUS系列", "part_no": "99PVYKAW3M120K", "raw_cars": "大單廂", "cars": ["大單廂"], "front_vlts": ["40", "70"], "rear_vlts": ["18", "35", "40", "70"], "vlts": ["40", "70"]},
-{"brand": "Smith", "part_type": "車身", "series": "Bella系列", "part_no": "99PVYKAW120D", "raw_cars": "雙廂", "cars": ["雙廂"], "front_vlts": ["40", "70"], "rear_vlts": ["05", "15", "30", "40", "70"], "vlts": ["40", "70"]},
-{"brand": "FSK", "part_type": "車身", "series": "KS系列", "part_no": "99PVYKAWFSK120D", "raw_cars": "雙廂", "cars": ["雙廂"], "front_vlts": ["40"], "rear_vlts": ["20", "40"], "vlts": ["40"]},
-{"brand": "3M", "part_type": "車身", "series": "8803 PLUS系列", "part_no": "99PVYKAW3M120D", "raw_cars": "雙廂", "cars": ["雙廂"], "front_vlts": ["40", "70"], "rear_vlts": ["18", "35", "40", "70"], "vlts": ["40", "70"]}
-];
 const LCV_CAR_MODELS = [
 { code: "單廂", name: "卡旺單廂", displayText: "單廂" },
 { code: "大單廂", name: "卡旺大單廂", displayText: "大單廂" },
 { code: "雙廂", name: "卡旺雙廂", displayText: "雙廂" }
 ];
 const PART_TYPES_MAP = { "front": "前擋", "body": "車身", "sunroof": "天窗" };
-// --- 程式初始化讀取 Excel ---
 async function loadExcelData() {
 try {
 const cacheBuster = ?v=${Date.now()};
 let response = await fetch(database.xlsx${cacheBuster});
-if (!response.ok) throw new Error("找不到 database.xlsx");
+if (!response.ok) {
+throw new Error(HTTP 錯誤碼: ${response.status}。請確認專案根目錄下是否有小寫的 'database.xlsx' 檔案。);
+}
 let arrayBuffer = await response.arrayBuffer();
+parseAndInitWorkbook(arrayBuffer);
+} catch (err) {
+console.error("自動載入 Excel 失敗:", err);
+document.getElementById('loading-spinner').textContent = "⚠️";
+document.getElementById('loading-text').innerHTML = <span style="color:#ffc107;">無法自動讀取 GitHub 線上 Excel</span><br><span style="font-size:0.85rem; color:#f8d7da;">錯誤原因: ${err.message}</span>;
+}
+}
+// 🚀 核心防呆升級：不再抓中文字工作表名稱，改依「第 1、2 個分頁」排序直接解析
+function parseAndInitWorkbook(arrayBuffer) {
+try {
 let workbook = XLSX.read(arrayBuffer, { type: 'array' });
-let filmSheetName = workbook.SheetNames.find(n => n.includes('隔熱紙') || n.toLowerCase().includes('film') || n.toLowerCase().includes('part')) || workbook.SheetNames[0];
+if (workbook.SheetNames.length === 0) {
+throw new Error("Excel 檔案內沒有任何工作表！");
+}
+// 🟢 規定第一個分頁就是隔熱紙資料
+let filmSheetName = workbook.SheetNames[0];
 let rawFilmJson = XLSX.utils.sheet_to_json(workbook.Sheets[filmSheetName]);
-PV_DATABASE = rawFilmJson.map(row => {
+MASTER_DATABASE = rawFilmJson.map(row => {
 let brand = String(row['品牌'] || row['brand'] || '').trim();
 let rawPos = String(row['位置'] || row['part_type'] || '').trim();
 let partType = (rawPos === '前檔') ? '前擋' : rawPos;
@@ -399,20 +428,17 @@ let rawVlts = String(row['透光度'] || row['vlts'] || '').trim();
 let vlts = rawVlts.split(/[,.\s]+/).map(v => v.trim()).filter(Boolean);
 return { brand, part_type: partType, series, part_no: partNo, raw_cars: rawCars, cars, vlts };
 });
-let modelSheetName = workbook.SheetNames.find(n => n.includes('車型') || n.toLowerCase().includes('model'));
-if (modelSheetName) {
+// 🟢 規定第二個分頁就是車型代碼對照表
+if (workbook.SheetNames.length > 1) {
+let modelSheetName = workbook.SheetNames[1];
 parsePVModels(workbook.Sheets[modelSheetName]);
-} else if (workbook.SheetNames.length > 1) {
-parsePVModels(workbook.Sheets[workbook.SheetNames[1]]);
 }
-// 預設以 PV 模式初始化介面
+// 成功解析後，初始化介面
 switchMode('PV');
 document.getElementById('loading').style.display = 'none';
-} catch (err) {
-console.error("載入 Excel 失敗，將以預設 LCV 模式運作或提示錯誤", err);
-alert("載入 database.xlsx 失敗，請確認 PV 版的 Excel 檔案放置於正確目錄！目前預設可運作卡旺商車版。");
-document.getElementById('loading').style.display = 'none';
-switchMode('PV');
+} catch (parseError) {
+alert("Excel 內容解析錯誤！請確認 Excel 的「第一個分頁」為隔熱紙欄位資料，「第二個分頁」為車型代碼資料。");
+console.error(parseError);
 }
 }
 function parsePVModels(worksheet) {
@@ -439,62 +465,43 @@ PV_CAR_MODELS.push({ code, name, vinPrefix, displayText });
 if (vinPrefix) PV_VIN_PREFIX_MAP[vinPrefix] = displayText;
 }
 }
-// --- 核心：動態切換 PV / LCV 介面與資料庫 ---
+document.getElementById('excel-file-input').addEventListener('change', function(e) {
+let file = e.target.files;
+if (!file) return;
+let reader = new FileReader();
+reader.onload = function(evt) {
+let data = new Uint8Array(evt.target.result);
+parseAndInitWorkbook(data);
+};
+reader.readAsArrayBuffer(file);
+});
 function switchMode(mode) {
-if (CURRENT_MODE === mode && document.getElementById('carModel').options.length > 1) return; // 避免重複重構
+if (CURRENT_MODE === mode && document.getElementById('carModel').options.length > 1) return;
 CURRENT_MODE = mode;
 const carModelSelect = document.getElementById('carModel');
 const versionBadge = document.getElementById('current-version-badge');
 const mainHeaderTitle = document.getElementById('main-header-title');
 const pageTitle = document.getElementById('page-title');
 const sunroofSection = document.getElementById('sunroof-section');
-// UI 文字元件調整
 const frontTitleText = document.getElementById('front-title-text');
-const frontBrandLabel = document.getElementById('front-brand-label');
-const bodyBrandLabel = document.getElementById('body-brand-label');
-const frontSeriesGroup = document.getElementById('front-series-group');
-const frontSpecGroup = document.getElementById('front-spec-group');
-const bodySeriesGroup = document.getElementById('body-series-group');
-const bodySpecGroup = document.getElementById('body-spec-group');
+const bodySpecWrapper = document.getElementById('body-spec-wrapper');
 carModelSelect.innerHTML = '-- 請選擇車型 --';
 clearAllDropdowns();
 if (mode === 'LCV') {
-// 切換為商用車卡旺模式
 pageTitle.textContent = "卡旺隔熱紙下單小幫手";
 mainHeaderTitle.textContent = "卡旺隔熱紙下單小幫手";
 versionBadge.textContent = "當前模式：LCV 商用車版 (車身碼 KNCS 自動分流)";
 versionBadge.style.backgroundColor = "#fff3cd";
 versionBadge.style.color = "#856404";
-sunroofSection.style.display = 'none'; // 商車沒有天窗，直接隱藏
-// 調整欄位排版符合原 LCV 架構 (品牌合併系列)
+sunroofSection.style.display = 'none';
 frontTitleText.textContent = "【前擋】(不分車型)";
-frontBrandLabel.textContent = "品牌與系列";
-bodyBrandLabel.textContent = "品牌與系列";
-frontSeriesGroup.style.display = 'none';
-bodySeriesGroup.style.display = 'none';
-frontSpecGroup.style.width = '100%';
-bodySpecGroup.style.gridColumn = 'span 2';
-// 帶入商車車型選單
-LCV_CAR_MODELS.forEach(m => {
-const opt = document.createElement('option');
-opt.value = m.displayText;
-opt.textContent = m.displayText;
-carModelSelect.appendChild(opt);
-});
-// 帶入商車前擋與車身品牌選單
-['front', 'body'].forEach(partKey => {
-const brandSelect = document.getElementById(${partKey}-brand);
-brandSelect.innerHTML = '-- 請選擇品牌系列 --';
-// 原LCV使用 value="品牌|系列"
-brandSelect.appendChild(new Option("Smith Bella系列", "Smith|Bella系列"));
-brandSelect.appendChild(new Option("FSK KS系列", "FSK|KS系列"));
-brandSelect.appendChild(new Option("3M 8803 PLUS系列", "3M|8803 PLUS系列"));
-});
-// 顯示商用車透光度容器
+bodySpecWrapper.style.gridColumn = 'span 2';
 document.getElementById('pv-body-vlt-container').style.display = 'none';
-onCarModelChange(); // 更新單雙廂容器
+LCV_CAR_MODELS.forEach(m => {
+carModelSelect.appendChild(new Option(m.displayText, m.displayText));
+});
+onCarModelChange();
 } else {
-// 切換為乘用車 PV 模式
 pageTitle.textContent = "KIA 隔熱紙下單小幫手";
 mainHeaderTitle.textContent = "隔熱紙下單小幫手";
 versionBadge.textContent = "當前模式：PV 乘用車版";
@@ -502,55 +509,43 @@ versionBadge.style.backgroundColor = "#eef2f7";
 versionBadge.style.color = "#0056b3";
 sunroofSection.style.display = 'block';
 frontTitleText.textContent = "【前擋】";
-frontBrandLabel.textContent = "品牌";
-bodyBrandLabel.textContent = "品牌";
-frontSeriesGroup.style.display = 'flex';
-bodySeriesGroup.style.display = 'flex';
-frontSpecGroup.style.width = '100%';
-bodySpecGroup.style.gridColumn = 'span 1';
-// 顯示乘用車前/後/後擋透光度容器，隱藏商車容器
+bodySpecWrapper.style.gridColumn = 'span 2';
 document.getElementById('pv-body-vlt-container').style.display = 'grid';
 document.getElementById('lcv-single-vlt-container').style.display = 'none';
 document.getElementById('lcv-double-vlt-container').style.display = 'none';
-// 帶入乘用車車型選單
 PV_CAR_MODELS.forEach(m => {
-const opt = document.createElement('option');
-opt.value = m.displayText;
-opt.textContent = m.displayText;
-carModelSelect.appendChild(opt);
+carModelSelect.appendChild(new Option(m.displayText, m.displayText));
 });
-// 帶入乘用車品牌選單
+}
 ['front', 'body', 'sunroof'].forEach(partKey => {
 const brandSelect = document.getElementById(${partKey}-brand);
 brandSelect.innerHTML = '-- 請選擇品牌 --';
-brandSelect.appendChild(new Option("FSK", "FSK"));
-brandSelect.appendChild(new Option("3M", "3M"));
-brandSelect.appendChild(new Option("Smith", "Smith"));
+const pType = PART_TYPES_MAP[partKey];
+const brands = [...new Set(MASTER_DATABASE.filter(d => d.part_type === pType).map(d => d.brand))];
+brands.forEach(b => {
+if(b) brandSelect.appendChild(new Option(b, b));
 });
-}
+});
 updateNote();
 }
 function clearAllDropdowns() {
 ['front', 'body', 'sunroof'].forEach(p => {
+const series = document.getElementById(${p}-series);
+if(series) series.innerHTML = '-- 請先選品牌 --';
 const spec = document.getElementById(${p}-spec);
-if(spec) spec.innerHTML = '-- 請先選擇 --';
+if(spec) spec.innerHTML = '-- 請先選系列 --';
 const partno = document.getElementById(${p}-partno);
 if(partno) partno.textContent = '---';
 const alertElem = document.getElementById(${p}-alert);
 if(alertElem) alertElem.style.display = 'none';
 if (p === 'body') {
-document.getElementById('body-vlt-front').innerHTML = '-- 請先選規格 --';
-document.getElementById('body-vlt-rear').innerHTML = '-- 請先選規格 --';
-document.getElementById('body-vlt-back').innerHTML = '-- 請先選規格 --';
-document.getElementById('body-vlt-single').innerHTML = '-- 請先選規格 --';
-document.getElementById('body-vlt-lcv-front').innerHTML = '-- 請先選規格 --';
-document.getElementById('body-vlt-lcv-rear').innerHTML = '-- 請先選規格 --';
+['body-vlt-front', 'body-vlt-rear', 'body-vlt-back', 'body-vlt-single', 'body-vlt-lcv-front', 'body-vlt-lcv-rear'].forEach(id => {
+const el = document.getElementById(id);
+if(el) el.innerHTML = '-- 請先選規格 --';
+});
 } else {
 const vlt = document.getElementById(${p}-vlt);
-if(vlt) {
-vlt.innerHTML = '-- 請先選規格 --';
-vlt.disabled = false;
-}
+if(vlt) vlt.innerHTML = '-- 請先選規格 --';
 }
 });
 document.getElementById('model-mismatch-alert').style.display = 'none';
@@ -566,7 +561,6 @@ const rawUpper = item.raw_cars.toUpperCase();
 if (rawUpper === userCode || rawUpper.includes(userCode)) return true;
 return false;
 }
-// --- 監聽車身碼輸入事件 (包含自動分流判斷) ---
 function onVinInput() {
 const vinInput = document.getElementById('vin');
 let cleanedValue = vinInput.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -577,21 +571,16 @@ vinAlert.style.display = 'block';
 } else {
 vinAlert.style.display = 'none';
 }
-// 核心判斷：輸入滿 4 碼時進行車身碼前四碼分流
 if (cleanedValue.length >= 4) {
 const prefix4 = cleanedValue.substring(0, 4);
 if (prefix4 === 'KNCS') {
-// 自動切換為 LCV 卡旺商用車版
 switchMode('LCV');
 } else {
-// 其餘狀況維持或切回 PV 乘用車版
 switchMode('PV');
 }
 } else {
-// 未滿4碼時預設回主管要求的 PV 版主頁
 switchMode('PV');
 }
-// 各版本獨立的 VIN 第 6 碼連動邏輯
 if (CURRENT_MODE === 'LCV' && cleanedValue.length >= 6) {
 const char6 = cleanedValue.charAt(5);
 const carModelSelect = document.getElementById('carModel');
@@ -619,7 +608,7 @@ break;
 updateNote();
 }
 function checkVinModelMismatch() {
-if (CURRENT_MODE !== 'LCV') return; // 原PV版無此警示機制，僅LCV有
+if (CURRENT_MODE !== 'LCV') return;
 const vin = document.getElementById('vin').value.trim().toUpperCase();
 const carModel = document.getElementById('carModel').value;
 const alertElem = document.getElementById('model-mismatch-alert');
@@ -638,7 +627,6 @@ alertElem.style.display = 'none';
 alertElem.style.display = 'none';
 }
 }
-// --- 車型選擇變更事件 ---
 function onCarModelChange() {
 const carModel = document.getElementById('carModel').value;
 if (CURRENT_MODE === 'LCV') {
@@ -652,89 +640,39 @@ doubleContainer.style.display = 'grid';
 singleContainer.style.display = 'grid';
 doubleContainer.style.display = 'none';
 }
-['front', 'body'].forEach(p => {
-const brandVal = document.getElementById(${p}-brand).value;
-if (brandVal) onBrandChange(p);
-else updatePartInfo(p);
-});
-} else {
+}
 ['front', 'body', 'sunroof'].forEach(p => {
 const brand = document.getElementById(${p}-brand).value;
-const series = document.getElementById(${p}-series).value;
-if (brand && series) onSeriesChange(p);
+if (brand) onBrandChange(p);
 else updatePartInfo(p);
 });
-}
 updateNote();
 }
-// --- 品牌選擇變更事件 ---
 function onBrandChange(partKey) {
-const brandVal = document.getElementById(${partKey}-brand).value;
-const partType = PART_TYPES_MAP[partKey];
-const specSelect = document.getElementById(${partKey}-spec);
-if (CURRENT_MODE === 'LCV') {
-// LCV 模式：原來的 onBrandSeriesChange 邏輯
-specSelect.innerHTML = '-- 請選擇適用車型 --';
-clearVltSelects(partKey);
-if (brandVal) {
-const [brand, series] = brandVal.split('|');
-const matches = LCV_DATABASE.filter(item => item.brand === brand && item.part_type === partType && item.series === series);
-const userCarModel = document.getElementById('carModel').value;
-let autoMatchedIndex = -1;
-matches.forEach((item, idx) => {
-const opt = document.createElement('option');
-opt.value = idx;
-opt.textContent = 適用車型: ${item.raw_cars} (件號: ${item.part_no});
-specSelect.appendChild(opt);
-if (userCarModel && autoMatchedIndex === -1) {
-if (item.cars.includes(userCarModel)) autoMatchedIndex = idx;
-}
-});
-if (autoMatchedIndex !== -1) specSelect.value = autoMatchedIndex;
-else if (matches.length > 0) specSelect.value = 0;
-onSpecChange(partKey);
-} else {
-updatePartInfo(partKey);
-}
-} else {
-// PV 模式邏輯
+const brand = document.getElementById(${partKey}-brand).value;
 const seriesSelect = document.getElementById(${partKey}-series);
+const specSelect = document.getElementById(${partKey}-spec);
+const partType = PART_TYPES_MAP[partKey];
 seriesSelect.innerHTML = '-- 請選擇系列 --';
 specSelect.innerHTML = '-- 請先選系列 --';
 clearVltSelects(partKey);
-if (brandVal) {
+if (brand) {
 const seriesList = [...new Set(
-PV_DATABASE
-.filter(item => item.brand === brandVal && item.part_type === partType)
+MASTER_DATABASE
+.filter(item => item.brand === brand && item.part_type === partType)
 .map(item => item.series)
 )];
 seriesList.forEach(s => {
-const opt = document.createElement('option');
-opt.value = s;
-opt.textContent = cleanSeriesName(s);
-seriesSelect.appendChild(opt);
+if(s) seriesSelect.appendChild(new Option(cleanSeriesName(s), s));
 });
+if (seriesList.length === 1) {
+seriesSelect.value = seriesList[0];
+onSeriesChange(partKey);
+}
 }
 updatePartInfo(partKey);
 }
-}
-function clearVltSelects(partKey) {
-if (partKey === 'body') {
-['body-vlt-front', 'body-vlt-rear', 'body-vlt-back', 'body-vlt-single', 'body-vlt-lcv-front', 'body-vlt-lcv-rear'].forEach(id => {
-const el = document.getElementById(id);
-if(el) el.innerHTML = '-- 請先選規格 --';
-});
-} else {
-const select = document.getElementById(${partKey}-vlt);
-if(select) {
-select.innerHTML = '-- 請先選規格 --';
-if(CURRENT_MODE === 'LCV' && partKey === 'front') select.disabled = true;
-}
-}
-}
-// --- PV專用：系列選擇變更事件 ---
 function onSeriesChange(partKey) {
-if (CURRENT_MODE === 'LCV') return;
 const brand = document.getElementById(${partKey}-brand).value;
 const series = document.getElementById(${partKey}-series).value;
 const specSelect = document.getElementById(${partKey}-spec);
@@ -743,12 +681,12 @@ const userCarModel = document.getElementById('carModel').value;
 specSelect.innerHTML = '-- 請選擇適用車型 --';
 clearVltSelects(partKey);
 if (brand && series) {
-const matches = PV_DATABASE.filter(item => item.brand === brand && item.part_type === partType && item.series === series);
+const matches = MASTER_DATABASE.filter(item => item.brand === brand && item.part_type === partType && item.series === series);
 let autoMatchedIndex = -1;
 matches.forEach((item, idx) => {
 const opt = document.createElement('option');
 opt.value = idx;
-opt.textContent = 適用車型: ${item.raw_cars} (件號: ${item.part_no});
+opt.textContent = 適用: ${item.raw_cars} (件號: ${item.part_no});
 specSelect.appendChild(opt);
 if (userCarModel && autoMatchedIndex === -1) {
 if (checkModelMatch(userCarModel, item)) autoMatchedIndex = idx;
@@ -761,46 +699,34 @@ onSpecChange(partKey);
 updatePartInfo(partKey);
 }
 }
-// --- 規格選擇變更事件 ---
 function onSpecChange(partKey) {
-const brandVal = document.getElementById(${partKey}-brand).value;
+const brand = document.getElementById(${partKey}-brand).value;
+const series = document.getElementById(${partKey}-series).value;
 const specIndex = document.getElementById(${partKey}-spec).value;
 const partType = PART_TYPES_MAP[partKey];
 clearVltSelects(partKey);
-if (!brandVal || specIndex === "") {
+if (!brand || !series || specIndex === "") {
 updatePartInfo(partKey);
 return;
 }
-if (CURRENT_MODE === 'LCV') {
-const [brand, series] = brandVal.split('|');
-const matches = LCV_DATABASE.filter(item => item.brand === brand && item.part_type === partType && item.series === series);
-const selectedItem = matches[specIndex];
-if (selectedItem) {
-if (partKey === 'front') {
-const select = document.getElementById('front-vlt');
-select.innerHTML = <option value="${selectedItem.vlt_display}">${selectedItem.vlt_display}</option>;
-select.disabled = false;
-} else if (partKey === 'body') {
-const frontVlts = selectedItem.front_vlts || [];
-const rearVlts = selectedItem.rear_vlts || [];
-['body-vlt-single', 'body-vlt-lcv-front'].forEach(id => {
-const select = document.getElementById(id);
-select.innerHTML = '-- 請選擇 --';
-frontVlts.forEach(v => select.appendChild(new Option(v, v)));
-});
-const rearSelect = document.getElementById('body-vlt-lcv-rear');
-rearSelect.innerHTML = '-- 請選擇 --';
-rearVlts.forEach(v => rearSelect.appendChild(new Option(v, v)));
-}
-}
-} else {
-// PV 模式
-const series = document.getElementById(${partKey}-series).value;
-const matches = PV_DATABASE.filter(item => item.brand === brandVal && item.part_type === partType && item.series === series);
+const matches = MASTER_DATABASE.filter(item => item.brand === brand && item.part_type === partType && item.series === series);
 const selectedItem = matches[specIndex];
 if (selectedItem) {
 const allVlts = selectedItem.vlts.map(v => v.replace('%', '')).sort((a,b) => parseInt(a) - parseInt(b));
 if (partKey === 'body') {
+if (CURRENT_MODE === 'LCV') {
+const frontVltSelect = document.getElementById('body-vlt-lcv-front');
+const singleVltSelect = document.getElementById('body-vlt-single');
+[frontVltSelect, singleVltSelect].forEach(select => {
+select.innerHTML = '-- 請選擇 --';
+const filtered = allVlts.filter(v => v === "40" || v === "70");
+const targetVlts = filtered.length > 0 ? filtered : allVlts;
+targetVlts.forEach(v => select.appendChild(new Option(v, v)));
+});
+const rearSelect = document.getElementById('body-vlt-lcv-rear');
+rearSelect.innerHTML = '-- 請選擇 --';
+allVlts.forEach(v => rearSelect.appendChild(new Option(v, v)));
+} else {
 const frontVltSelect = document.getElementById('body-vlt-front');
 frontVltSelect.innerHTML = '-- 請選擇 --';
 const frontVlts = allVlts.filter(v => parseInt(v) >= 38);
@@ -811,56 +737,51 @@ const select = document.getElementById(id);
 select.innerHTML = '-- 請選擇 --';
 allVlts.forEach(v => select.appendChild(new Option(v, v)));
 });
+}
 } else {
 const select = document.getElementById(${partKey}-vlt);
 select.innerHTML = '-- 請選擇 --';
-allVlts.forEach(v => select.appendChild(new Option(v, v)));
-}
+allVlts.forEach(v => {
+let displayText = v;
+if (brand === "Smith" && v === "70" && CURRENT_MODE === 'LCV') displayText = "Bella 70";
+if (brand === "FSK" && v === "78" && CURRENT_MODE === 'LCV') displayText = "KS 78";
+if (brand === "3M" && v === "70" && CURRENT_MODE === 'LCV') displayText = "P 70";
+select.appendChild(new Option(displayText, displayText));
+});
+if(select.options.length > 1) select.selectedIndex = 1;
 }
 }
 updatePartInfo(partKey);
 }
-// --- 更新件號與警示資訊 ---
 function updatePartInfo(partKey) {
-const brandVal = document.getElementById(${partKey}-brand).value;
+const brand = document.getElementById(${partKey}-brand).value;
+const series = document.getElementById(${partKey}-series).value;
+const specIndex = document.getElementById(${partKey}-spec).value;
 const partNoElem = document.getElementById(${partKey}-partno);
 const alertElem = document.getElementById(${partKey}-alert);
 const partType = PART_TYPES_MAP[partKey];
 const userCarModel = document.getElementById('carModel').value;
-const specIndex = document.getElementById(${partKey}-spec).value;
-if (!brandVal || specIndex === "") {
-if(partNoElem) partNoElem.textContent = '---';
-if(alertElem) alertElem.style.display = 'none';
-updateNote();
-return;
-}
-let selectedItem = null;
-if (CURRENT_MODE === 'LCV') {
-const [brand, series] = brandVal.split('|');
-const matches = LCV_DATABASE.filter(item => item.brand === brand && item.part_type === partType && item.series === series);
-selectedItem = matches[specIndex];
-} else {
-const series = document.getElementById(${partKey}-series).value;
-const matches = PV_DATABASE.filter(item => item.brand === brandVal && item.part_type === partType && item.series === series);
-selectedItem = matches[specIndex];
-}
+if (brand && series && specIndex !== "") {
+const matches = MASTER_DATABASE.filter(item => item.brand === brand && item.part_type === partType && item.series === series);
+const selectedItem = matches[specIndex];
 if (selectedItem) {
 partNoElem.textContent = selectedItem.part_no;
-if (alertElem && CURRENT_MODE === 'PV') {
 if (userCarModel) {
 const isMatch = checkModelMatch(userCarModel, selectedItem);
-alertElem.style.display = isMatch ? 'none' : 'block';
+if(alertElem) alertElem.style.display = isMatch ? 'none' : 'block';
 } else {
-alertElem.style.display = 'none';
-}
+if(alertElem) alertElem.style.display = 'none';
 }
 } else {
-if(partNoElem) partNoElem.textContent = '---';
+partNoElem.textContent = '---';
+if(alertElem) alertElem.style.display = 'none';
+}
+} else {
+partNoElem.textContent = '---';
 if(alertElem) alertElem.style.display = 'none';
 }
 updateNote();
 }
-// --- 核心優化：動態產出系統備註，未填欄位「完全不顯示該列」 ---
 function updateNote() {
 const vin = document.getElementById('vin').value.trim().toUpperCase();
 const carModel = document.getElementById('carModel').value;
@@ -870,66 +791,48 @@ const location = document.getElementById('location').value.trim();
 const deliveryDateRaw = document.getElementById('deliveryDate').value;
 const otherInfo = document.getElementById('otherInfo').value.trim();
 let lines = [];
-// 必填基本資料 (只要有輸入就顯示，確保彈性)
 if (vin) lines.push(車身碼：${vin});
 if (carModel) lines.push(車型：${carModel});
-// 【選填優化點】：如果沒填，直接不塞入 lines 陣列中
 if (carColor) lines.push(車色：${carColor});
 if (agent) lines.push(業代：${agent});
 if (location) lines.push(存放(施工)地點：${location});
-if (CURRENT_MODE === 'LCV') {
-// --- LCV 卡旺 備註欄產出邏輯 ---
-const frontBs = document.getElementById('front-brand').value;
-if (frontBs) {
-const [fBrand] = frontBs.split('|');
-if (fBrand === "3M") lines.push(前擋：3M P70);
-else if (fBrand === "Smith") lines.push(前擋：Smith Bella 70);
-else if (fBrand === "FSK") lines.push(前擋：FSK KS78);
-} else {
-lines.push(前擋：);
-}
-const bodyBs = document.getElementById('body-brand').value;
-if (bodyBs) {
-const [bBrand] = bodyBs.split('|');
-if (carModel === "雙廂") {
-const vltFront = document.getElementById('body-vlt-lcv-front').value;
-const vltRear = document.getElementById('body-vlt-lcv-rear').value;
-if (bBrand === "3M") {
-if (vltFront && vltFront === vltRear) lines.push(車身：3M P${vltFront});
-else lines.push(車身： + [vltFront ? 前窗 3M P${vltFront} : '', vltRear ? 後窗 3M P${vltRear} : ''].filter(Boolean).join('、'));
-} else if (bBrand === "Smith") {
-if (vltFront && vltFront === vltRear) lines.push(車身：Bella ${vltFront});
-else lines.push(車身： + [vltFront ? 前窗 Bella ${vltFront} : '', vltRear ? 後窗 Bella ${vltRear} : ''].filter(Boolean).join('、'));
-} else if (bBrand === "FSK") {
-if (vltFront && vltFront === vltRear) lines.push(車身：FSK KS${vltFront});
-else lines.push(車身： + [vltFront ? 前窗 FSK KS${vltFront} : '', vltRear ? 後窗 FSK KS${vltRear} : ''].filter(Boolean).join('、'));
-}
-} else {
-const vltSingle = document.getElementById('body-vlt-single').value;
-if (bBrand === "3M") lines.push(車身：3M P${vltSingle});
-else if (bBrand === "Smith") lines.push(車身：Bella ${vltSingle});
-else if (bBrand === "FSK") lines.push(車身：FSK KS${vltSingle});
-}
-} else {
-lines.push(車身：);
-}
-if (deliveryDateRaw) lines.push(交車日：${deliveryDateRaw.replace(/-/g, '/')});
-if (otherInfo) lines.push(補充事項：${otherInfo});
-} else {
-// --- PV 乘用車 備註欄產出邏輯 ---
 const frontBrand = document.getElementById('front-brand').value;
 const frontSeries = cleanSeriesName(document.getElementById('front-series').value);
 const frontVlt = document.getElementById('front-vlt').value;
 if (frontBrand && frontSeries) {
-lines.push(前擋：${frontBrand} ${frontSeries}${frontVlt ? '-' + frontVlt : ''});
+let vltStr = frontVlt ? (frontVlt.includes(frontBrand) ? frontVlt : ${frontSeries}-${frontVlt}) : frontSeries;
+if(CURRENT_MODE === 'LCV') {
+if (frontBrand === "3M") vltStr = "3M P70";
+if (frontBrand === "Smith") vltStr = "Smith Bella 70";
+if (frontBrand === "FSK") vltStr = "FSK KS78";
+}
+lines.push(前擋：${CURRENT_MODE === 'LCV' ? vltStr : frontBrand + ' ' + vltStr});
+} else if (CURRENT_MODE === 'LCV') {
+lines.push(前擋：);
 }
 const bodyBrand = document.getElementById('body-brand').value;
 const bodySeries = cleanSeriesName(document.getElementById('body-series').value);
+if (bodyBrand && bodySeries) {
+const modelName = ${bodyBrand} ${bodySeries};
+if (CURRENT_MODE === 'LCV') {
+if (carModel === "雙廂") {
+const vltFront = document.getElementById('body-vlt-lcv-front').value;
+const vltRear = document.getElementById('body-vlt-lcv-rear').value;
+const prefix = bodyBrand === "3M" ? "3M P" : (bodyBrand === "Smith" ? "Bella " : "FSK KS");
+if (vltFront && vltFront === vltRear) {
+lines.push(車身：${prefix}${vltFront});
+} else {
+lines.push(車身： + [vltFront ? 前窗 ${prefix}${vltFront} : '', vltRear ? 後窗 ${prefix}${vltRear} : ''].filter(Boolean).join('、'));
+}
+} else {
+const vltSingle = document.getElementById('body-vlt-single').value;
+const prefix = bodyBrand === "3M" ? "3M P" : (bodyBrand === "Smith" ? "Bella " : "FSK KS");
+lines.push(車身：${prefix}${vltSingle});
+}
+} else {
 const vltFront = document.getElementById('body-vlt-front').value;
 const vltRear = document.getElementById('body-vlt-rear').value;
 const vltBack = document.getElementById('body-vlt-back').value;
-if (bodyBrand && bodySeries) {
-const modelName = ${bodyBrand} ${bodySeries};
 if (vltFront && vltFront === vltRear && vltRear === vltBack) {
 lines.push(車身：${modelName}-${vltFront});
 } else {
@@ -939,18 +842,21 @@ if (vltBack) lines.push(後擋：${modelName}-${vltBack});
 if (!vltFront && !vltRear && !vltBack) lines.push(車身：${modelName});
 }
 }
+} else if (CURRENT_MODE === 'LCV') {
+lines.push(車身：);
+}
+if (CURRENT_MODE === 'PV') {
 const sunroofBrand = document.getElementById('sunroof-brand').value;
 const sunroofSeries = cleanSeriesName(document.getElementById('sunroof-series').value);
 const sunroofVlt = document.getElementById('sunroof-vlt').value;
 if (sunroofBrand && sunroofSeries) {
 lines.push(天窗：${sunroofBrand} ${sunroofSeries}${sunroofVlt ? '-' + sunroofVlt : ''});
 }
-if (deliveryDateRaw) lines.push(交車日：${deliveryDateRaw.replace(/-/g, '/')});
-if (otherInfo) lines.push(其他：${otherInfo});
 }
+if (deliveryDateRaw) lines.push(交車日：${deliveryDateRaw.replace(/-/g, '/')});
+if (otherInfo) lines.push(CURRENT_MODE === 'LCV' ? 補充事項：${otherInfo} : 其他：${otherInfo});
 document.getElementById('finalNote').value = lines.join('\n');
 }
-// --- 複製文字檢核與執行 ---
 function copyText(elementId) {
 if (elementId === 'finalNote') {
 let missingFields = [];
@@ -960,42 +866,8 @@ const agent = document.getElementById('agent').value.trim();
 const location = document.getElementById('location').value.trim();
 if (!vin || vin.length !== 17) missingFields.push('車身碼 (需為正確17碼)');
 if (!carModel) missingFields.push('車型');
-if (!agent) missingFields.push(CURRENT_MODE === 'LCV' ? '業代人員' : '業代');
+if (!agent) missingFields.push('業代人員');
 if (!location) missingFields.push('存放(施工)地點');
-// 隔熱紙選取完備性防呆
-if (CURRENT_MODE === 'LCV') {
-const frontBs = document.getElementById('front-brand').value;
-const bodyBs = document.getElementById('body-brand').value;
-let isBodyComplete = false;
-if (carModel === "雙廂") {
-isBodyComplete = bodyBs && document.getElementById('body-vlt-lcv-front').value && document.getElementById('body-vlt-lcv-rear').value;
-} else {
-isBodyComplete = bodyBs && document.getElementById('body-vlt-single').value;
-}
-if (!frontBs && !bodyBs) missingFields.push('隔熱紙型號 (【前擋】與【車身】至少需完成設定)');
-else if (bodyBs && !isBodyComplete) missingFields.push('【車身】透光度未完全選擇');
-} else {
-const frontBrand = document.getElementById('front-brand').value;
-const frontSeries = document.getElementById('front-series').value;
-const frontVlt = document.getElementById('front-vlt').value;
-const isFrontComplete = frontBrand && frontSeries && frontVlt;
-const bodyBrand = document.getElementById('body-brand').value;
-const bodySeries = document.getElementById('body-series').value;
-const bodyVltFront = document.getElementById('body-vlt-front').value;
-const bodyVltRear = document.getElementById('body-vlt-rear').value;
-const bodyVltBack = document.getElementById('body-vlt-back').value;
-const isBodySelected = bodyBrand || bodySeries || bodyVltFront || bodyVltRear || bodyVltBack;
-const isBodyComplete = bodyBrand && bodySeries && bodyVltFront && bodyVltRear && bodyVltBack;
-const sunroofBrand = document.getElementById('sunroof-brand').value;
-const sunroofSeries = document.getElementById('sunroof-series').value;
-const sunroofVlt = document.getElementById('sunroof-vlt').value;
-const isSunroofComplete = sunroofBrand && sunroofSeries && sunroofVlt;
-if (!isFrontComplete && !isBodySelected && !isSunroofComplete) {
-missingFields.push('隔熱紙型號 (【前擋】、【車身】、【天窗】至少需完成一項設定)');
-} else if (isBodySelected && !isBodyComplete) {
-missingFields.push('【車身】設定未完備 (需選齊品牌、系列及三座透光度)');
-}
-}
 if (missingFields.length > 0) {
 alert('⚠️ 無法複製系統備註！請先完成以下必要欄位：\n\n' + missingFields.map((f, i) => ${i + 1}. ${f}).join('\n'));
 return;
